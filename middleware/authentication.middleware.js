@@ -36,7 +36,6 @@ export const isUser = async (req, res, next) => {
 };
 
 // seller role
-
 export const isSeller = async (req, res, next) => {
   // extract token from req.headers
 
@@ -68,6 +67,7 @@ export const isSeller = async (req, res, next) => {
   }
 
   req.loggedInUser = user;
+  req.loggedInUserId = user._id;
 
   next();
 };

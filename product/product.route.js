@@ -1,9 +1,10 @@
 import express from "express";
-import { validateReqBody } from "../middleware/validation.middleware.js";
-import { productSchema } from "./product.validation.js";
 import { isSeller, isUser } from "../middleware/authentication.middleware.js";
+import { checkProductOwnerShip } from "../middleware/check.product.ownership.js";
+import { validateReqBody } from "../middleware/validation.middleware.js";
+import { checkMongoIdValidity } from "../utils/check.mongo.id.validity.js";
 import Product from "./product.model.js";
-import mongoose from "mongoose";
+import { productSchema } from "./product.validation.js";
 
 const router = express.Router();
 
@@ -27,32 +28,74 @@ router.post(
 );
 
 // get product details
-router.get("/product/details/:id", isUser, async (req, res) => {
-  // extract id from req.params
-  const productId = req.params.id;
+router.get(
+  "/product/details/:id",
+  isUser,
+  checkMongoIdValidity,
+  async (req, res) => {
+    // extract id from req.params
+    const productId = req.params.id;
 
-  // check for mongo id validity
-  const isValidMongoId = mongoose.Types.ObjectId.isValid(productId);
+    // find product
+    const requiredProduct = await Product.findOne({ _id: productId });
 
-  // if not valid mongo id, throw error
-  if (!isValidMongoId) {
-    return res.status(400).send({ message: "Invalid mongo id." });
+    // if not product, throw error
+
+    if (!requiredProduct) {
+      return res.status(404).send({ message: "Product does not exist." });
+    }
+
+    //   hide ownerId
+    requiredProduct.ownerId = undefined;
+
+    // send product details as response
+    return res
+      .status(200)
+      .send({ message: "success", product: requiredProduct });
   }
+);
 
-  // find product
-  const requiredProduct = await Product.findOne({ _id: productId });
+// delete product
+router.delete(
+  "/product/delete/:id",
+  isSeller,
+  checkMongoIdValidity,
+  checkProductOwnerShip,
+  async (req, res) => {
+    // extract id from req.params
+    const productId = req.params.id;
 
-  // if not product, throw error
+    // delete product
+    await Product.deleteOne({ _id: productId });
 
-  if (!requiredProduct) {
-    return res.status(404).send({ message: "Product does not exist." });
+    return res
+      .status(200)
+      .send({ message: "Product is deleted successfully." });
   }
+);
 
-  //   hide ownerId
-  requiredProduct.ownerId = undefined;
+// edit product
+router.put(
+  "/product/edit/:id",
+  isSeller,
+  checkMongoIdValidity,
+  validateReqBody(productSchema),
+  checkProductOwnerShip,
+  async (req, res) => {
+    // extract id from req.params
+    const productId = req.params.id;
 
-  // send product details as response
-  return res.status(200).send({ message: "success", product: requiredProduct });
-});
+    // extract new values from req.body
+    const newValues = req.body;
+
+    // update product
+    await Product.updateOne({ _id: productId }, { $set: { ...newValues } });
+
+    // send response
+    return res
+      .status(200)
+      .send({ message: "Product is updated successfully." });
+  }
+);
 
 export default router;
