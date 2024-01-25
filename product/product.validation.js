@@ -20,3 +20,9 @@ export let productSchema = Yup.object({
     .trim()
     .max(1000, "Description must be at max 1000 characters."),
 });
+
+export let paginationSchema = Yup.object({
+  page: Yup.number().default(1).min(1), //TODO: custom message for number type
+  limit: Yup.number().default(10).min(1),
+  searchText: Yup.string().nullable().trim().default(null),
+});

@@ -1,10 +1,14 @@
 import express from "express";
-import { isSeller, isUser } from "../middleware/authentication.middleware.js";
+import {
+  isBuyer,
+  isSeller,
+  isUser,
+} from "../middleware/authentication.middleware.js";
 import { checkProductOwnerShip } from "../middleware/check.product.ownership.js";
 import { validateReqBody } from "../middleware/validation.middleware.js";
 import { checkMongoIdValidity } from "../utils/check.mongo.id.validity.js";
 import Product from "./product.model.js";
-import { productSchema } from "./product.validation.js";
+import { paginationSchema, productSchema } from "./product.validation.js";
 
 const router = express.Router();
 
@@ -98,4 +102,93 @@ router.put(
   }
 );
 
+// get product list by buyer
+router.post(
+  "/product/buyer/list",
+  isBuyer,
+  validateReqBody(paginationSchema),
+  async (req, res) => {
+    // extract pagination data from req.body
+    const { page, limit, searchText } = req.body;
+
+    // calculate skip
+    const skip = (page - 1) * limit;
+
+    // filter stage
+    let match = {};
+
+    if (searchText) {
+      match = { name: { $regex: searchText, $options: "i" } };
+    }
+
+    // query
+    const products = await Product.aggregate([
+      {
+        $match: match,
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: limit,
+      },
+      {
+        $project: {
+          name: 1,
+          price: 1,
+          brand: 1,
+          image: 1,
+        },
+      },
+    ]);
+
+    // send res
+
+    return res.status(200).send({ message: "success", products: products });
+  }
+);
+
+// get product list by seller
+router.post(
+  "/product/seller/list",
+  isSeller,
+  validateReqBody(paginationSchema),
+  async (req, res) => {
+    // extract pagination data from req.body
+    const { page, limit, searchText } = req.body;
+
+    // calculate skip
+    const skip = (page - 1) * limit;
+
+    // filter stage
+    let match = { ownerId: req.loggedInUserId };
+
+    if (searchText) {
+      match = {
+        ownerId: req.loggedInUserId,
+        name: { $regex: searchText, $options: "i" },
+      };
+    }
+
+    let products = await Product.aggregate([
+      {
+        $match: match,
+      },
+      {
+        $skip: skip,
+      },
+      { $limit: limit },
+      {
+        $project: {
+          name: 1,
+          brand: 1,
+          price: 1,
+          image: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).send({ message: "success", products: products });
+  }
+);
 export default router;
