@@ -4,6 +4,7 @@ import { User } from "./user.model.js";
 import bcrypt from "bcrypt";
 import { validateReqBody } from "../middleware/validation.middleware.js";
 import jwt from "jsonwebtoken";
+import Cart from "../cart/cart.model.js";
 
 const router = express.Router();
 
@@ -26,7 +27,12 @@ router.post("/user/register", validateReqBody(userSchema), async (req, res) => {
   newUser.password = hashedPassword;
 
   // create user
-  await User.create(newUser);
+  const newlyCreatedUser = await User.create(newUser);
+
+  // create cart
+  if (newlyCreatedUser.role === "buyer") {
+    await Cart.create({ buyerId: newlyCreatedUser._id });
+  }
 
   // send response
   return res.status(201).send({ message: "User is registered successfully." });
