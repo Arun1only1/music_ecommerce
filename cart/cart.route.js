@@ -1,164 +1,224 @@
 import express from "express";
 import { isBuyer } from "../middleware/authentication.middleware.js";
-import { validateReqBody } from "../middleware/validation.middleware.js";
 import {
   addProductToCartValidationSchema,
   updateItemQuantitySchema,
 } from "./cart.validation.js";
-import mongoose from "mongoose";
 import Product from "../product/product.model.js";
 import Cart from "./cart.model.js";
+import mongoose from "mongoose";
 import { checkMongoIdValidity } from "../utils/check.mongo.id.validity.js";
 
 const router = express.Router();
 
 // add item to cart
-router.put(
+router.post(
   "/cart/add/item",
   isBuyer,
-  validateReqBody(addProductToCartValidationSchema),
-  async (req, res) => {
-    // extract item to be added to cart
+  async (req, res, next) => {
+    // extract item from req.body
     const item = req.body;
+
+    // validate item
+    try {
+      const validatedData = await addProductToCartValidationSchema.validate(
+        item
+      );
+
+      req.body = validatedData;
+
+      next();
+    } catch (error) {
+      return res.status(400).send({ message: error.message });
+    }
+  },
+  async (req, res) => {
+    // extract item from req.body
+    const item = req.body;
+
+    item.buyerId = req.loggedInUserId;
 
     // check productId for mongo id validity
     const isValidMongoId = mongoose.Types.ObjectId.isValid(item.productId);
 
     // if not valid mongo id
     if (!isValidMongoId) {
-      return res.status(400).send({ message: "Invalid mongo id." });
+      return res.status(400).send({ message: "Invalid mongo id" });
     }
 
-    // check if product exists using productId
+    // check if product exists
     const product = await Product.findOne({ _id: item.productId });
 
+    // if not product, throw error
     if (!product) {
       return res.status(404).send({ message: "Product does not exist." });
     }
 
-    const cart = await Cart.findOne({ "items.productId": item.productId });
+    // check for product quantity
 
-    if (cart) {
-      return res.status(409).send({ message: "Item already present in cart." });
-    }
-
-    // check for stock availability
+    // if quantity not available, throw error
     if (item.orderedQuantity > product.quantity) {
-      return res.status(422).send({ message: "Product is outnumbered." });
+      return res.status(422).send({ message: "Product is out numbered." });
     }
 
-    // add item to cart
-    await Cart.updateOne(
-      { buyerId: req.loggedInUserId },
-      {
-        $push: {
-          items: item,
-        },
-      }
-    );
+    // check if product is already added for this user
+    const cartItem = await Cart.findOne({
+      productId: item.productId,
+      buyerId: item.buyerId,
+    });
 
+    if (cartItem) {
+      return res.status(409).send({ message: "Item is already added." });
+    }
+
+    // add item
+
+    await Cart.create(item);
+
+    // send res
     return res
       .status(200)
-      .send({ message: "Product is added to cart successfully." });
+      .send({ message: "Item is added to cart successfully." });
   }
 );
 
-// remove single item from cart
+// update quantity
 router.put(
+  "/cart/item/update-quantity",
+  isBuyer,
+  async (req, res, next) => {
+    // get updateData from req.body
+    const updateData = req.body;
+
+    // validate updateData
+
+    try {
+      const validatedData = await updateItemQuantitySchema.validate(updateData);
+
+      req.body = validatedData;
+
+      next();
+    } catch (error) {
+      return res.status(400).send({ message: error.message });
+    }
+  },
+  async (req, res) => {
+    // extract update data from req.body
+    const updateData = req.body;
+
+    // check productId for mongo id validity
+    const isValidMongoId = mongoose.Types.ObjectId.isValid(
+      updateData.productId
+    );
+
+    // if not valid mongo id
+    if (!isValidMongoId) {
+      return res.status(400).send({ message: "Invalid mongo id" });
+    }
+    // find product using product Id
+    const product = await Product.findOne({ _id: updateData.productId });
+
+    // if not product, throw error
+    if (!product) {
+      return res.status(404).send({ message: "Product does not exist." });
+    }
+
+    // find cart item using productId and buyerId
+    const cartItem = await Cart.findOne({
+      buyerId: req.loggedInUserId,
+      productId: updateData.productId,
+    });
+
+    if (!cartItem) {
+      return res
+        .status(409)
+        .send({ message: "Please add item to cart first." });
+    }
+
+    // quantity verification
+    const newOrderedQuantity =
+      updateData.action === "inc"
+        ? cartItem.orderedQuantity + 1
+        : cartItem.orderedQuantity - 1;
+
+    if (newOrderedQuantity > product.quantity) {
+      return res.status(422).send({ message: "Product is outnumbered." });
+    }
+
+    if (newOrderedQuantity < 1) {
+      return res
+        .status(422)
+        .send({ message: "Item quantity should be at least 1." });
+    }
+
+    // update quantity
+    await Cart.updateOne(
+      { productId: updateData.productId, buyerId: req.loggedInUserId },
+      {
+        $set: {
+          orderedQuantity: newOrderedQuantity,
+        },
+      }
+    );
+    // send response
+
+    return res.status(200).send({ message: "Quantity is updated." });
+  }
+);
+
+// remove cart item
+router.delete(
   "/cart/remove/:id",
   isBuyer,
   checkMongoIdValidity,
   async (req, res) => {
-    //   extract product id from req.params
+    // extract product id from req.params
     const productId = req.params.id;
 
-    //   buyer id
-    const buyerId = req.loggedInUserId;
+    // delete that product from cart
+    await Cart.deleteOne({ productId: productId, buyerId: req.loggedInUserId });
 
-    await Cart.updateOne(
-      { buyerId: buyerId },
-      {
-        $pull: {
-          items: { productId: productId },
-        },
-      }
-    );
-
-    return res.status(200).send({ message: "Item is removed successfully." });
+    // send response
+    return res.status(200).send({ message: "Item is removed from cart." });
   }
 );
 
 // flush cart
-router.put("/cart/flush", isBuyer, async (req, res) => {
-  // buyerId
-  const buyerId = req.loggedInUserId;
+router.delete("/cart/flush", isBuyer, async (req, res) => {
+  // delete cart items for this buyer
+  await Cart.deleteMany({ buyerId: req.loggedInUserId });
 
-  await Cart.updateOne(
-    { buyerId: buyerId },
-    {
-      $set: {
-        items: [],
-      },
-    }
-  );
-
+  //   send response
   return res.status(200).send({ message: "Cart is flushed successfully." });
 });
 
-// update cart item quantity
+// item list from cart
+router.get("/cart/item/list", isBuyer, async (req, res) => {
+  const cartItems = await Cart.aggregate([
+    {
+      $match: {
+        buyerId: req.loggedInUserId,
+      },
+    },
+    {
+      $lookup: {
+        from: "products",
+        localField: "productId",
+        foreignField: "_id",
+        as: "productData",
+      },
+    },
+    {
+      $project: {
+        orderedQuantity: 1,
+        name: { $first: "$productData.name" },
+        brand: { $first: "$productData.brand" },
+        category: { $first: "$productData.category" },
+        price: { $first: "$productData.price" },
+      },
+    },
+  ]);
 
-router.put(
-  "/cart/item/update-quantity",
-  isBuyer,
-  validateReqBody(updateItemQuantitySchema),
-  async (req, res) => {
-    // extract req.body
-    const input = req.body;
-
-    // check mongo id  validity for product id
-    const isValidMongoId = mongoose.Types.ObjectId.isValid(input.productId);
-
-    // if not valid, throw error
-    if (!isValidMongoId) {
-      return res.status(400).send({ message: "Invalid mongo id." });
-    }
-
-    // check if item is in cart or not
-    const cartItem = await Cart.findOne({ "items.productId": input.productId });
-
-    // if not cart item
-    if (!cartItem) {
-      return res.status(404).send({ message: "Item is not present in cart." });
-    }
-
-    // find product
-    const product = await Product.findOne({ _id: input.productId });
-
-    if (!product) {
-      return res.status(404).send({ message: "Product does not exist." });
-    }
-
-    const foundItemOnCart = cartItem.items.filter((item) =>
-      item.productId.equals(input.productId)
-    );
-
-    const newOrderedQuantity =
-      input.action === "inc"
-        ? foundItemOnCart[0].orderedQuantity + 1
-        : foundItemOnCart[0].orderedQuantity - 1;
-
-    await Cart.updateOne(
-      { buyerId: req.loggedInUserId, "items.productId": product._id },
-      {
-        $set: {
-          "items.$.orderedQuantity": newOrderedQuantity,
-        },
-      }
-    );
-
-    return res
-      .status(200)
-      .send({ message: "Quantity is updated successfully." });
-  }
-);
+  return res.status(200).send({ message: "success", cartData: cartItems });
+});
 export default router;
