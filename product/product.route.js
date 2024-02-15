@@ -9,6 +9,7 @@ import { validateReqBody } from "../middleware/validation.middleware.js";
 import { checkMongoIdValidity } from "../utils/check.mongo.id.validity.js";
 import Product from "./product.model.js";
 import { paginationSchema, productSchema } from "./product.validation.js";
+import Cart from "../cart/cart.model.js";
 
 const router = express.Router();
 
@@ -72,6 +73,9 @@ router.delete(
     // delete product
     await Product.deleteOne({ _id: productId });
 
+    // also remove this product from cart
+    await Cart.deleteMany({ productId: productId });
+
     return res
       .status(200)
       .send({ message: "Product is deleted successfully." });
@@ -127,6 +131,11 @@ router.post(
         $match: match,
       },
       {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+      {
         $skip: skip,
       },
       {
@@ -138,13 +147,20 @@ router.post(
           price: 1,
           brand: 1,
           image: 1,
+          description: { $substr: ["$description", 0, 200] },
         },
       },
     ]);
 
+    // calculate number of page
+    const totalProduct = await Product.find(match).countDocuments();
+
+    const numberOfPages = Math.ceil(totalProduct / limit);
     // send res
 
-    return res.status(200).send({ message: "success", products: products });
+    return res
+      .status(200)
+      .send({ message: "success", products: products, numberOfPages });
   }
 );
 
@@ -175,6 +191,11 @@ router.post(
         $match: match,
       },
       {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+      {
         $skip: skip,
       },
       { $limit: limit },
@@ -184,11 +205,20 @@ router.post(
           brand: 1,
           price: 1,
           image: 1,
+          description: { $substr: ["$description", 0, 200] },
         },
       },
     ]);
 
-    return res.status(200).send({ message: "success", products: products });
+    // calculate number of page
+    const totalProduct = await Product.find(match).countDocuments();
+
+    const numberOfPages = Math.ceil(totalProduct / limit);
+
+    // send res
+    return res
+      .status(200)
+      .send({ message: "success", products: products, numberOfPages });
   }
 );
 export default router;

@@ -173,10 +173,10 @@ router.delete(
   checkMongoIdValidity,
   async (req, res) => {
     // extract product id from req.params
-    const productId = req.params.id;
+    const cartId = req.params.id;
 
     // delete that product from cart
-    await Cart.deleteOne({ productId: productId, buyerId: req.loggedInUserId });
+    await Cart.deleteOne({ _id: cartId, buyerId: req.loggedInUserId });
 
     // send response
     return res.status(200).send({ message: "Item is removed from cart." });
@@ -215,10 +215,35 @@ router.get("/cart/item/list", isBuyer, async (req, res) => {
         brand: { $first: "$productData.brand" },
         category: { $first: "$productData.category" },
         price: { $first: "$productData.price" },
+        image: { $first: "$productData.image" },
+        productId: 1,
       },
     },
   ]);
 
-  return res.status(200).send({ message: "success", cartData: cartItems });
+  let subTotal = 0;
+
+  cartItems.forEach((item) => {
+    subTotal = subTotal + item.price * item.orderedQuantity;
+  });
+
+  const discount = (5 / 100) * subTotal;
+
+  const grandTotal = subTotal - discount;
+
+  return res.status(200).send({
+    message: "success",
+    cartData: cartItems,
+    orderSummary: { subTotal, grandTotal, discount },
+  });
+});
+
+// cart item count
+router.get("/cart/item/count", isBuyer, async (req, res) => {
+  const buyerId = req.loggedInUserId;
+
+  const cartCount = await Cart.find({ buyerId: buyerId }).count();
+
+  return res.status(200).send({ message: "success", cartItemCount: cartCount });
 });
 export default router;

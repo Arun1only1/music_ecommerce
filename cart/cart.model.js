@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 // set rule
 
+// v1 model
 // const itemSchema = new mongoose.Schema({
 //   productId: {
 //     type: mongoose.Schema.Types.ObjectId,

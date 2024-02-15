@@ -3,10 +3,14 @@ import userRoutes from "./user/user.route.js";
 import connectDB from "./connect.db.js";
 import productRoutes from "./product/product.route.js";
 import cartRoutes from "./cart/cart.route.js";
+import cors from "cors";
 
 const app = express();
 // to make app understand json
 app.use(express.json());
+
+// cors
+app.use(cors());
 
 // connect database
 connectDB();
