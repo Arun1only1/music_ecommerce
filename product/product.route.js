@@ -8,7 +8,11 @@ import { checkProductOwnerShip } from "../middleware/check.product.ownership.js"
 import { validateReqBody } from "../middleware/validation.middleware.js";
 import { checkMongoIdValidity } from "../utils/check.mongo.id.validity.js";
 import Product from "./product.model.js";
-import { paginationSchema, productSchema } from "./product.validation.js";
+import {
+  buyerPaginationSchema,
+  paginationSchema,
+  productSchema,
+} from "./product.validation.js";
 import Cart from "../cart/cart.model.js";
 
 const router = express.Router();
@@ -110,10 +114,10 @@ router.put(
 router.post(
   "/product/buyer/list",
   isBuyer,
-  validateReqBody(paginationSchema),
+  validateReqBody(buyerPaginationSchema),
   async (req, res) => {
     // extract pagination data from req.body
-    const { page, limit, searchText } = req.body;
+    const { page, limit, searchText, category, minPrice, maxPrice } = req.body;
 
     // calculate skip
     const skip = (page - 1) * limit;
@@ -125,6 +129,15 @@ router.post(
       match = { name: { $regex: searchText, $options: "i" } };
     }
 
+    if (category) {
+      match = { ...match, category: category };
+    }
+
+    if (minPrice && maxPrice) {
+      match = { ...match, price: { $gte: minPrice, $lte: maxPrice } };
+    }
+
+    console.log({ match });
     // query
     const products = await Product.aggregate([
       {

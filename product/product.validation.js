@@ -25,4 +25,22 @@ export let paginationSchema = Yup.object({
   page: Yup.number().default(1).min(1), //TODO: custom message for number type
   limit: Yup.number().default(10).min(1),
   searchText: Yup.string().nullable().trim().default(null),
+  category: Yup.string().oneOf(productCategories).default(null).nullable(),
+});
+
+export let buyerPaginationSchema = Yup.object({
+  page: Yup.number().default(1).min(1), //TODO: custom message for number type
+  limit: Yup.number().default(10).min(1),
+  searchText: Yup.string().nullable().trim().default(null),
+  category: Yup.string().oneOf(productCategories).default(null).nullable(),
+  minPrice: Yup.number().min(0, "Min price must be at least 0."),
+  maxPrice: Yup.number()
+    .min(0, "Max price must be greater than 0.")
+    .test({
+      name: "maxPrice",
+      message: "Max price must be greater than min price.",
+      test: function (value) {
+        return value >= this.parent.minPrice;
+      },
+    }),
 });
