@@ -4,6 +4,8 @@ import connectDB from "./connect.db.js";
 import productRoutes from "./product/product.route.js";
 import cartRoutes from "./cart/cart.route.js";
 import cors from "cors";
+import paymentRoutes from "./payment/payment.route.js";
+import orderRoutes from "./order/order.route.js";
 
 const app = express();
 // to make app understand json
@@ -19,6 +21,8 @@ connectDB();
 app.use(userRoutes);
 app.use(productRoutes);
 app.use(cartRoutes);
+app.use(paymentRoutes);
+app.use(orderRoutes);
 
 // port
 const PORT = 4000;

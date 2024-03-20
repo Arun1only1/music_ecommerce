@@ -137,7 +137,6 @@ router.post(
       match = { ...match, price: { $gte: minPrice, $lte: maxPrice } };
     }
 
-    console.log({ match });
     // query
     const products = await Product.aggregate([
       {
